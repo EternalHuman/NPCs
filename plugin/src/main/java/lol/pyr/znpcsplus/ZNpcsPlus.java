@@ -281,7 +281,7 @@ public class ZNpcsPlus {
         registerEnumParser(manager, RabbitType.class, incorrectUsageMessage);
         registerEnumParser(manager, AttachDirection.class, incorrectUsageMessage);
 
-        manager.registerCommand("npc", new MultiCommand(bootstrap.loadHelpMessage("root"))
+        manager.registerCommand("znpc", new MultiCommand(bootstrap.loadHelpMessage("root"))
                 .addSubcommand("center", new CenterCommand(npcRegistry))
                 .addSubcommand("create", new CreateCommand(npcRegistry, typeRegistry))
                 .addSubcommand("reloadconfig", new ReloadConfigCommand(configManager))

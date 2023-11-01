@@ -25,9 +25,8 @@ loadbefore:
   - Quests
 
 commands:
-  npc:
+  znpc:
     aliases:
       - znpc
       - znpcs
-      - npcs
     permission: znpcsplus.command.npc
