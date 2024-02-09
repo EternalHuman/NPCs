@@ -19,8 +19,8 @@ import org.bukkit.plugin.Plugin;
 import java.util.EnumSet;
 import java.util.concurrent.CompletableFuture;
 
-public class V1_19_2PacketFactory extends V1_17PacketFactory {
-    public V1_19_2PacketFactory(TaskScheduler scheduler, PacketEventsAPI<Plugin> packetEvents, EntityPropertyRegistryImpl propertyRegistry, LegacyComponentSerializer textSerializer, ConfigManager configManager) {
+public class V1_19_3PacketFactory extends V1_17PacketFactory {
+    public V1_19_3PacketFactory(TaskScheduler scheduler, PacketEventsAPI<Plugin> packetEvents, EntityPropertyRegistryImpl propertyRegistry, LegacyComponentSerializer textSerializer, ConfigManager configManager) {
         super(scheduler, packetEvents, propertyRegistry, textSerializer, configManager);
     }
 
@@ -30,7 +30,8 @@ public class V1_19_2PacketFactory extends V1_17PacketFactory {
         CompletableFuture<Void> future = new CompletableFuture<>();
         skinned(player, properties, new UserProfile(entity.getUuid(), Integer.toString(entity.getEntityId()))).thenAccept(profile -> {
             WrapperPlayServerPlayerInfoUpdate.PlayerInfo info = new WrapperPlayServerPlayerInfoUpdate.PlayerInfo(
-                    profile, false, 1, GameMode.CREATIVE, Component.empty(), null);
+                    profile, false, 1, GameMode.CREATIVE,
+                    Component.text(configManager.getConfig().tabDisplayName().replace("{id}", Integer.toString(entity.getEntityId()))), null);
             sendPacket(player, new WrapperPlayServerPlayerInfoUpdate(EnumSet.of(WrapperPlayServerPlayerInfoUpdate.Action.ADD_PLAYER,
                     WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_LISTED), info, info));
             future.complete(null);

@@ -10,9 +10,7 @@ import lol.pyr.znpcsplus.util.NpcLocation;
 import lol.pyr.znpcsplus.util.Viewable;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.internal.parser.ParsingExceptionImpl;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
@@ -47,11 +45,7 @@ public class HologramImpl extends Viewable implements Hologram {
     }
 
     public void addTextLine(String line) {
-        try {
-            addTextLineComponent(textSerializer.deserialize(textSerializer.serialize(MiniMessage.miniMessage().deserialize(line))));
-        } catch (ParsingExceptionImpl e) {
-            addTextLineComponent(Component.text(line));
-        }
+        addTextLineComponent(textSerializer.deserialize(textSerializer.serialize(MiniMessage.miniMessage().deserialize(line))));
     }
 
     public void addItemLineStack(org.bukkit.inventory.ItemStack item) {
@@ -67,6 +61,10 @@ public class HologramImpl extends Viewable implements Hologram {
         lines.add(newLine);
         relocateLines(newLine);
         for (Player viewer : getViewers()) newLine.show(viewer.getPlayer());
+    }
+
+    public void addLegacyLine(String line) {
+        addTextLineComponent(Component.text(line));
     }
 
     public void addLine(String line) {
@@ -112,7 +110,7 @@ public class HologramImpl extends Viewable implements Hologram {
     }
 
     public void insertTextLine(int index, String line) {
-        insertTextLineComponent(index, textSerializer.deserialize(line));
+        insertTextLineComponent(index, textSerializer.deserialize(textSerializer.serialize(MiniMessage.miniMessage().deserialize(line))));
     }
 
     public void insertItemLineStack(int index, org.bukkit.inventory.ItemStack item) {

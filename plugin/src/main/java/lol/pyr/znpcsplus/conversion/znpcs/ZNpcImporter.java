@@ -8,9 +8,7 @@ import lol.pyr.znpcsplus.api.interaction.InteractionType;
 import lol.pyr.znpcsplus.api.skin.SkinDescriptor;
 import lol.pyr.znpcsplus.config.ConfigManager;
 import lol.pyr.znpcsplus.conversion.DataImporter;
-import lol.pyr.znpcsplus.conversion.znpcs.model.ZNpcsAction;
-import lol.pyr.znpcsplus.conversion.znpcs.model.ZNpcsLocation;
-import lol.pyr.znpcsplus.conversion.znpcs.model.ZNpcsModel;
+import lol.pyr.znpcsplus.conversion.znpcs.model.*;
 import lol.pyr.znpcsplus.entity.EntityPropertyImpl;
 import lol.pyr.znpcsplus.entity.EntityPropertyRegistryImpl;
 import lol.pyr.znpcsplus.hologram.HologramImpl;
@@ -25,15 +23,17 @@ import lol.pyr.znpcsplus.npc.NpcImpl;
 import lol.pyr.znpcsplus.npc.NpcTypeRegistryImpl;
 import lol.pyr.znpcsplus.packets.PacketFactory;
 import lol.pyr.znpcsplus.scheduling.TaskScheduler;
-import lol.pyr.znpcsplus.skin.Skin;
+import lol.pyr.znpcsplus.skin.SkinImpl;
 import lol.pyr.znpcsplus.skin.cache.MojangSkinCache;
 import lol.pyr.znpcsplus.skin.descriptor.FetchingDescriptor;
 import lol.pyr.znpcsplus.skin.descriptor.MirrorDescriptor;
 import lol.pyr.znpcsplus.skin.descriptor.PrefetchedDescriptor;
-import lol.pyr.znpcsplus.util.*;
+import lol.pyr.znpcsplus.util.BungeeConnector;
+import lol.pyr.znpcsplus.util.ItemSerializationUtil;
+import lol.pyr.znpcsplus.util.LookType;
+import lol.pyr.znpcsplus.util.NpcLocation;
 import net.kyori.adventure.platform.bukkit.BukkitAudiences;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.DyeColor;
 import org.bukkit.inventory.ItemStack;
@@ -54,6 +54,7 @@ public class ZNpcImporter implements DataImporter {
     private final EntityPropertyRegistryImpl propertyRegistry;
     private final MojangSkinCache skinCache;
     private final File dataFile;
+    private final File conversationFile;
     private final Gson gson;
     private final BungeeConnector bungeeConnector;
 
@@ -70,6 +71,7 @@ public class ZNpcImporter implements DataImporter {
         this.propertyRegistry = propertyRegistry;
         this.skinCache = skinCache;
         this.dataFile = dataFile;
+        this.conversationFile = new File(dataFile.getParentFile(), "conversations.json");
         this.bungeeConnector = bungeeConnector;
         gson = new GsonBuilder()
                 .create();
@@ -86,6 +88,19 @@ public class ZNpcImporter implements DataImporter {
             return Collections.emptyList();
         }
         if (models == null) return Collections.emptyList();
+
+
+        ZnpcsConversations[] conversations;
+        try (BufferedReader fileReader = Files.newBufferedReader(conversationFile.toPath())) {
+            JsonElement element = JsonParser.parseReader(fileReader);
+            conversations = gson.fromJson(element, ZnpcsConversations[].class);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return Collections.emptyList();
+        }
+        if (conversations == null) return Collections.emptyList();
+
+
         ArrayList<NpcEntryImpl> entries = new ArrayList<>(models.length);
         for (ZNpcsModel model : models) {
             String type = model.getNpcType();
@@ -104,6 +119,41 @@ public class ZNpcImporter implements DataImporter {
             UUID uuid = model.getUuid() == null ? UUID.randomUUID() : model.getUuid();
             NpcImpl npc = new NpcImpl(uuid, propertyRegistry, configManager, packetFactory, textSerializer, oldLoc.getWorld(), typeRegistry.getByName(type), location);
             npc.getType().applyDefaultProperties(npc);
+
+
+            // Convert the conversations from each NPC
+            ZNpcsConversation conversation = model.getConversation();
+            if (conversation != null) {
+
+                // Loop through all conversations in the conversations.json file
+                for (ZnpcsConversations conv : conversations) {
+
+                    // If the conversation name matches the conversation name in the data.json file, proceed
+                    if (conv.getName().equalsIgnoreCase(conversation.getConversationName())) {
+
+                        int totalDelay = 0;
+
+                        // Loop through all texts in the conversation
+                        for(ZNpcsConversationText text : conv.getTexts()) {
+
+                            // Add the delay in ticks to the total delay
+                            totalDelay += text.getDelay() * 20;
+
+                            // Get the lines of text from the conversation
+                            String[] lines = text.getLines();
+
+                            // Loop through all lines of text
+                            for (String line : lines) {
+
+                                // Create a new message action for each line of text
+                                InteractionActionImpl action = new MessageAction(adventure, line, InteractionType.ANY_CLICK, textSerializer, 0, totalDelay);
+                                npc.addAction(action);
+                            }
+                        }
+                    }
+                }
+            }
+
 
             HologramImpl hologram = npc.getHologram();
             hologram.setOffset(model.getHologramHeight());
@@ -127,10 +177,10 @@ public class ZNpcImporter implements DataImporter {
                 npc.setProperty(propertyRegistry.getByName("skin", SkinDescriptor.class), new FetchingDescriptor(skinCache, model.getSkinName()));
             }
             else if (model.getSkin() != null && model.getSignature() != null) {
-                npc.setProperty(propertyRegistry.getByName("skin", SkinDescriptor.class), new PrefetchedDescriptor(new Skin(model.getSkin(), model.getSignature())));
+                npc.setProperty(propertyRegistry.getByName("skin", SkinDescriptor.class), new PrefetchedDescriptor(new SkinImpl(model.getSkin(), model.getSignature())));
             }
 
-            Map<String, Object> toggleValues = model.getNpcToggleValues();
+            Map<String, Object> toggleValues = model.getNpcToggleValues() == null ? model.getNpcFunctions() : model.getNpcToggleValues();
             if (toggleValues != null) {
                 if (toggleValues.containsKey("look")) {
                     npc.setProperty(propertyRegistry.getByName("look", LookType.class), LookType.CLOSEST_PLAYER);
@@ -140,9 +190,9 @@ public class ZNpcImporter implements DataImporter {
                 }
                 if (toggleValues.containsKey("glow")) {
                     try {
-                        npc.setProperty(propertyRegistry.getByName("glow", NamedColor.class), NamedColor.valueOf((String) toggleValues.get("glow")));
+                        npc.setProperty(propertyRegistry.getByName("glow", DyeColor.class), DyeColor.valueOf((String) toggleValues.get("glow")));
                     } catch (IllegalArgumentException e) {
-                        npc.setProperty(propertyRegistry.getByName("glow", NamedColor.class), NamedColor.WHITE);
+                        npc.setProperty(propertyRegistry.getByName("glow", DyeColor.class), DyeColor.WHITE);
                     }
                 }
             }

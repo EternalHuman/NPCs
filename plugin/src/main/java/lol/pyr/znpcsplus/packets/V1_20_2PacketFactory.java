@@ -17,12 +17,13 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.Optional;
 
-public class V1_20_2PacketFactory extends V1_19_2PacketFactory {
+public class V1_20_2PacketFactory extends V1_19_3PacketFactory {
 
     protected ConfigManager configManager;
 
     public V1_20_2PacketFactory(TaskScheduler scheduler, PacketEventsAPI<Plugin> packetEvents, EntityPropertyRegistryImpl propertyRegistry, LegacyComponentSerializer textSerializer, ConfigManager configManager) {
         super(scheduler, packetEvents, propertyRegistry, textSerializer, configManager);
+        this.configManager = configManager;
     }
 
     @Override

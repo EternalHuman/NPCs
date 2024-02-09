@@ -7,19 +7,22 @@ import lol.pyr.znpcsplus.entity.EntityPropertyImpl;
 import lol.pyr.znpcsplus.entity.PacketEntity;
 import lol.pyr.znpcsplus.util.PapiUtil;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.entity.Player;
 
 import java.util.Map;
 import java.util.Optional;
 
 public class NameProperty extends EntityPropertyImpl<Component> {
-    private final boolean legacy;
+    private final LegacyComponentSerializer legacySerializer;
+    private final boolean legacySerialization;
     private final boolean optional;
 
-    public NameProperty(boolean legacy, boolean optional) {
+    public NameProperty(LegacyComponentSerializer legacySerializer, boolean legacySerialization, boolean optional) {
         super("name", null, Component.class);
+        this.legacySerializer = legacySerializer;
 
-        this.legacy = legacy;
+        this.legacySerialization = legacySerialization;
         this.optional = optional;
     }
 
@@ -27,15 +30,14 @@ public class NameProperty extends EntityPropertyImpl<Component> {
     public void apply(Player player, PacketEntity entity, boolean isSpawned, Map<Integer, EntityData> properties) {
         Component value = entity.getProperty(this);
         if (value != null) {
-            String serialized = legacy ?
-                    AdventureSerializer.getLegacyGsonSerializer().serialize(value) :
-                    AdventureSerializer.getGsonSerializer().serialize(value);
-            serialized = PapiUtil.set(player, serialized);
-            if (optional) properties.put(2, newEntityData(2, EntityDataTypes.OPTIONAL_COMPONENT, Optional.of(serialized)));
-            else properties.put(2, newEntityData(2, EntityDataTypes.STRING, serialized));
+            value = PapiUtil.set(legacySerializer, player, value);
+            Object serialized = legacySerialization ? AdventureSerializer.getLegacyGsonSerializer().serialize(value) :
+                    optional ? value : LegacyComponentSerializer.legacySection().serialize(value);
+            if (optional) properties.put(2, new EntityData(2, EntityDataTypes.OPTIONAL_ADV_COMPONENT, Optional.of(serialized)));
+            else properties.put(2, new EntityData(2, EntityDataTypes.STRING, serialized));
         }
 
-        if (legacy) properties.put(3, newEntityData(3, EntityDataTypes.BYTE, (byte) (value != null ? 1 : 0)));
+        if (legacySerialization) properties.put(3, newEntityData(3, EntityDataTypes.BYTE, (byte) (value != null ? 1 : 0)));
         else properties.put(3, newEntityData(3, EntityDataTypes.BOOLEAN, value != null));
     }
 }

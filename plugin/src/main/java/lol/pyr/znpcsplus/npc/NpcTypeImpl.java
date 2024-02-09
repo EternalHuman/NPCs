@@ -132,6 +132,9 @@ public class NpcTypeImpl implements NpcType {
             if (EntityTypes.isTypeInstanceOf(type, EntityTypes.ABSTRACT_HORSE)) {
                 addProperties("is_saddled", "is_eating", "is_rearing", "has_mouth_open");
             }
+            if (type.equals(EntityTypes.HORSE) && version.isOlderThan(ServerVersion.V_1_14)) {
+                addProperties("horse_armor");
+            }
             if (EntityTypes.isTypeInstanceOf(type, EntityTypes.CHESTED_HORSE)) {
                 addProperties("has_chest");
             } else if (version.isOlderThan(ServerVersion.V_1_11) && type.equals(EntityTypes.HORSE)) {
@@ -153,7 +156,7 @@ public class NpcTypeImpl implements NpcType {
             }
             if (EntityTypes.isTypeInstanceOf(type, EntityTypes.PANDA)) {
                 if (version.isNewerThanOrEquals(ServerVersion.V_1_15)) {
-                    addProperties("panda_rolling", "panda_sitting", "panda_on_back");
+                    addProperties("panda_rolling", "panda_sitting", "panda_on_back", "hand");
                 } else {
                     addProperties("panda_eating");
                 }

@@ -99,16 +99,6 @@ public class ZNpcsPlus {
         PluginManager pluginManager = Bukkit.getPluginManager();
         long before = System.currentTimeMillis();
 
-        boolean legacy = new File(getDataFolder(), "data.json").isFile() && !new File(getDataFolder(), "data").isDirectory();
-        if (legacy) try {
-            Files.move(getDataFolder().toPath(), new File(getDataFolder().getParentFile(), "ZNPCsPlusLegacy").toPath());
-        } catch (IOException e) {
-            log(ChatColor.RED + " * Moving legacy files to subfolder failed, plugin will shut down.");
-            e.printStackTrace();
-            pluginManager.disablePlugin(bootstrap);
-            return;
-        }
-
         log(ChatColor.WHITE + " * Initializing libraries...");
 
         packetEvents.init();
@@ -125,7 +115,7 @@ public class ZNpcsPlus {
         MojangSkinCache skinCache = new MojangSkinCache(configManager);
         EntityPropertyRegistryImpl propertyRegistry = new EntityPropertyRegistryImpl(skinCache, configManager);
         PacketFactory packetFactory = setupPacketFactory(scheduler, propertyRegistry, configManager);
-        propertyRegistry.registerTypes(packetFactory);
+        propertyRegistry.registerTypes(packetFactory, textSerializer);
 
         ActionRegistry actionRegistry = new ActionRegistry();
         NpcTypeRegistryImpl typeRegistry = new NpcTypeRegistryImpl();
@@ -158,11 +148,14 @@ public class ZNpcsPlus {
         log(ChatColor.WHITE + " * Starting tasks...");
         if (configManager.getConfig().checkForUpdates()) {
             UpdateChecker updateChecker = new UpdateChecker(getDescription());
-            scheduler.runDelayedTimerAsync(updateChecker, 5L, 6000L);
+            scheduler.runLaterAsync(() -> {
+                scheduler.runDelayedTimerAsync(updateChecker, 0L, 6000L);
+                shutdownTasks.add(updateChecker::shutdown);
+            }, 5L);
             pluginManager.registerEvents(new UpdateNotificationListener(this, adventure, updateChecker, scheduler), bootstrap);
         }
 
-        scheduler.runDelayedTimerAsync(new NpcProcessorTask(npcRegistry, configManager, propertyRegistry), 60L, 3L);
+        scheduler.runDelayedTimerAsync(new NpcProcessorTask(npcRegistry, propertyRegistry), 60L, 3L);
         scheduler.runDelayedTimerAsync(new HologramRefreshTask(npcRegistry), 60L, 20L);
         scheduler.runDelayedTimerAsync(new SkinCacheCleanTask(skinCache), 1200, 1200);
         pluginManager.registerEvents(new ViewableHideOnLeaveListener(), bootstrap);
@@ -171,7 +164,7 @@ public class ZNpcsPlus {
         npcRegistry.reload();
         if (configManager.getConfig().autoSaveEnabled()) shutdownTasks.add(npcRegistry::save);
 
-        if (legacy) {
+        if (bootstrap.movedLegacy()) {
             log(ChatColor.WHITE + " * Converting legacy data...");
             try {
                 Collection<NpcEntryImpl> entries = importerRegistry.getImporter("znpcsplus_legacy").importData();
@@ -209,7 +202,12 @@ public class ZNpcsPlus {
 
     public void onDisable() {
         NpcApiProvider.unregister();
-        for (Runnable runnable : shutdownTasks) runnable.run();
+        for (Runnable runnable : shutdownTasks) try {
+            runnable.run();
+        } catch (Throwable throwable) {
+            bootstrap.getLogger().severe("One of the registered shutdown tasks threw an exception:");
+            throwable.printStackTrace();
+        }
         shutdownTasks.clear();
         PacketEvents.getAPI().terminate();
     }
@@ -218,7 +216,7 @@ public class ZNpcsPlus {
         HashMap<ServerVersion, LazyLoader<? extends PacketFactory>> versions = new HashMap<>();
         versions.put(ServerVersion.V_1_8, LazyLoader.of(() -> new V1_8PacketFactory(scheduler, packetEvents, propertyRegistry, textSerializer, configManager)));
         versions.put(ServerVersion.V_1_17, LazyLoader.of(() -> new V1_17PacketFactory(scheduler, packetEvents, propertyRegistry, textSerializer, configManager)));
-        versions.put(ServerVersion.V_1_19_2, LazyLoader.of(() -> new V1_19_2PacketFactory(scheduler, packetEvents, propertyRegistry, textSerializer, configManager)));
+        versions.put(ServerVersion.V_1_19_3, LazyLoader.of(() -> new V1_19_3PacketFactory(scheduler, packetEvents, propertyRegistry, textSerializer, configManager)));
         versions.put(ServerVersion.V_1_20_2, LazyLoader.of(() -> new V1_20_2PacketFactory(scheduler, packetEvents, propertyRegistry, textSerializer, configManager)));
 
         ServerVersion version = packetEvents.getServerManager().getVersion();
@@ -281,7 +279,7 @@ public class ZNpcsPlus {
         registerEnumParser(manager, RabbitType.class, incorrectUsageMessage);
         registerEnumParser(manager, AttachDirection.class, incorrectUsageMessage);
 
-        manager.registerCommand("znpc", new MultiCommand(bootstrap.loadHelpMessage("root"))
+        manager.registerCommand("npc", new MultiCommand(bootstrap.loadHelpMessage("root"))
                 .addSubcommand("center", new CenterCommand(npcRegistry))
                 .addSubcommand("create", new CreateCommand(npcRegistry, typeRegistry))
                 .addSubcommand("reloadconfig", new ReloadConfigCommand(configManager))
